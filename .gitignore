@@ -7,3 +7,5 @@ functions/.next/
 data/
 uploads/
 firebase-service-key.json
+
+.vercel

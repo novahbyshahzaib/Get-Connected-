@@ -4,6 +4,26 @@ import { join } from 'path';
 
 let initialized = false;
 
+function loadServiceAccount() {
+  const jsonEnv = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (jsonEnv) {
+    try {
+      return JSON.parse(jsonEnv);
+    } catch {}
+  }
+
+  const filePath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+  if (filePath) {
+    try {
+      const absPath = join(process.cwd(), filePath.replace('./', ''));
+      const raw = readFileSync(absPath, 'utf-8');
+      return JSON.parse(raw);
+    } catch {}
+  }
+
+  return null;
+}
+
 function ensureInit() {
   if (initialized) return true;
   if (admin.apps.length) {
@@ -11,17 +31,7 @@ function ensureInit() {
     return true;
   }
 
-  const envPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
-  let serviceAccount = null;
-  if (envPath) {
-    try {
-      const absPath = join(process.cwd(), envPath.replace('./', ''));
-      const raw = readFileSync(absPath, 'utf-8');
-      serviceAccount = JSON.parse(raw);
-    } catch {
-      return false;
-    }
-  }
+  const serviceAccount = loadServiceAccount();
 
   if (serviceAccount) {
     admin.initializeApp({
