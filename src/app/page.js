@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { verifyPin } from '@/actions';
+import { verifyPin, verifySessionToken } from '@/actions';
 
 export default function Home() {
   const router = useRouter();
@@ -11,6 +11,28 @@ export default function Home() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState('join');
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    tryAutoLogin();
+  }, []);
+
+  const tryAutoLogin = async () => {
+    try {
+      const raw = localStorage.getItem('gc_auth');
+      if (!raw) { setCheckingAuth(false); return; }
+
+      const sessions = JSON.parse(raw);
+      for (const [sid, token] of Object.entries(sessions)) {
+        const result = await verifySessionToken(sid, token);
+        if (result.valid) {
+          router.push(`/dashboard/${sid}`);
+          return;
+        }
+      }
+    } catch {}
+    setCheckingAuth(false);
+  };
 
   const handleJoin = async (e) => {
     e.preventDefault();
@@ -20,6 +42,7 @@ export default function Home() {
     try {
       const result = await verifyPin(hostId, pin);
       if (result.success) {
+        storeAuth(hostId, result.token);
         router.push(`/dashboard/${hostId}`);
       } else {
         setError(result.error || 'Invalid credentials');
@@ -30,6 +53,28 @@ export default function Home() {
       setLoading(false);
     }
   };
+
+  const storeAuth = (sid, token) => {
+    try {
+      const raw = localStorage.getItem('gc_auth');
+      const sessions = raw ? JSON.parse(raw) : {};
+      sessions[sid] = token;
+      localStorage.setItem('gc_auth', JSON.stringify(sessions));
+    } catch {}
+  };
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <svg className="animate-spin h-8 w-8 text-indigo-400 mx-auto" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden">

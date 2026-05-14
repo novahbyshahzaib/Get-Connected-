@@ -32,7 +32,16 @@ function ensureInit() {
     return true;
   }
 
-  return false;
+  try {
+    admin.initializeApp({
+      credential: admin.credential.applicationDefault(),
+      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    });
+    initialized = true;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function getAdminDb() {

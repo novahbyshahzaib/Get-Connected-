@@ -4,7 +4,7 @@ import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
-import { createSession, saveFileMetadata } from '@/actions';
+import { createSession, addFiles } from '@/actions';
 
 export default function HostPage() {
   const router = useRouter();
@@ -76,6 +76,20 @@ export default function HostPage() {
     return '📁';
   };
 
+  const storeHost = (sid, hostTok, authTok) => {
+    try {
+      const raw = localStorage.getItem('gc_host');
+      const hosts = raw ? JSON.parse(raw) : {};
+      hosts[sid] = hostTok;
+      localStorage.setItem('gc_host', JSON.stringify(hosts));
+
+      const rawAuth = localStorage.getItem('gc_auth');
+      const sessions = rawAuth ? JSON.parse(rawAuth) : {};
+      sessions[sid] = authTok;
+      localStorage.setItem('gc_auth', JSON.stringify(sessions));
+    } catch {}
+  };
+
   const handleUpload = async () => {
     if (!pin || files.length === 0) {
       setError('Please enter a PIN and select files');
@@ -87,8 +101,9 @@ export default function HostPage() {
     setProgress(0);
 
     try {
-      const newHostId = await createSession(pin);
+      const { hostId: newHostId, hostToken, accessToken } = await createSession(pin);
       setHostId(newHostId);
+      storeHost(newHostId, hostToken, accessToken);
 
       const fileMetadata = [];
       let completed = 0;
@@ -98,7 +113,6 @@ export default function HostPage() {
         const storageRef = ref(storage, storagePath);
 
         await uploadBytesResumable(storageRef, file);
-
         const downloadURL = await getDownloadURL(storageRef);
 
         fileMetadata.push({
@@ -114,7 +128,7 @@ export default function HostPage() {
         setProgress(Math.round((completed / files.length) * 100));
       }
 
-      await saveFileMetadata(newHostId, fileMetadata);
+      await addFiles(newHostId, fileMetadata);
       setProgress(100);
     } catch (err) {
       setError(err.message || 'Upload failed. Please try again.');
@@ -145,9 +159,9 @@ export default function HostPage() {
             </svg>
           </div>
 
-          <h2 className="text-2xl font-bold mb-2">Files Uploaded!</h2>
+          <h2 className="text-2xl font-bold mb-2">Room Created!</h2>
           <p className="text-gray-400 mb-6">
-            Share this Host ID with your receiver along with your PIN
+            Share this Host ID with others along with your PIN
           </p>
 
           <div className="glass-light rounded-xl p-6 mb-6">
@@ -176,9 +190,17 @@ export default function HostPage() {
             </div>
           </div>
 
-          <button onClick={() => router.push('/')} className="btn-secondary w-full">
-            Back to Home
-          </button>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => router.push(`/dashboard/${hostId}`)}
+              className="btn-primary w-full"
+            >
+              Go to Dashboard
+            </button>
+            <button onClick={() => router.push('/')} className="btn-secondary w-full">
+              Back to Home
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -202,7 +224,7 @@ export default function HostPage() {
             </svg>
           </button>
           <div>
-            <h1 className="text-2xl font-bold">Share Files</h1>
+            <h1 className="text-2xl font-bold">Create a Room</h1>
             <p className="text-gray-400 text-sm">Upload files and generate a secure share link</p>
           </div>
         </div>
@@ -277,7 +299,7 @@ export default function HostPage() {
               type="password"
               value={pin}
               onChange={(e) => setPin(e.target.value)}
-              placeholder="Enter a PIN to protect your files"
+              placeholder="Enter a PIN to protect your room"
               className="glass-input w-full px-4 py-3 rounded-xl text-sm"
               minLength={4}
               maxLength={20}
@@ -319,7 +341,7 @@ export default function HostPage() {
                 Uploading {progress}%
               </span>
             ) : (
-              'Upload & Generate Link'
+              'Create Room & Upload'
             )}
           </button>
         </div>
