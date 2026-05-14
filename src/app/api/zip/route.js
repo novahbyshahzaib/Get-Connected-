@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { checkAuth, getRawFiles } from '@/actions';
-import { bucket } from '@/lib/firebase-admin';
+import { getBucket } from '@/lib/firebase-admin';
 import JSZip from 'jszip';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -22,7 +24,7 @@ export async function GET(request) {
 
     for (const file of files) {
       try {
-        const [url] = await bucket.file(file.storagePath).getSignedUrl({
+        const [url] = await getBucket().file(file.storagePath).getSignedUrl({
           action: 'read',
           expires: Date.now() + 60 * 60 * 1000,
         });

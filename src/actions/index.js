@@ -4,10 +4,11 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { nanoid } from 'nanoid';
 import bcrypt from 'bcryptjs';
-import { adminDb } from '@/lib/firebase-admin';
+import admin from 'firebase-admin';
+import { getAdminDb } from '@/lib/firebase-admin';
 
 function getSessionDoc(hostId) {
-  return adminDb.collection('sessions').doc(hostId);
+  return getAdminDb().collection('sessions').doc(hostId);
 }
 
 export async function createSession(pin) {
@@ -29,7 +30,7 @@ export async function saveFileMetadata(hostId, files) {
   if (!session.exists) throw new Error('Session not found');
 
   await getSessionDoc(hostId).update({
-    files: adminDb.FieldValue.arrayUnion(...files),
+    files: admin.firestore.FieldValue.arrayUnion(...files),
   });
 
   return { success: true };
@@ -49,7 +50,7 @@ export async function verifyPin(hostId, pin) {
 
   const token = nanoid(32);
   await getSessionDoc(hostId).update({
-    accessTokens: adminDb.FieldValue.arrayUnion(token),
+    accessTokens: admin.firestore.FieldValue.arrayUnion(token),
   });
 
   const cookieStore = await cookies();
@@ -139,8 +140,8 @@ export async function getFileDownloadUrl(hostId, storagePath) {
     redirect('/');
   }
 
-  const { bucket } = await import('@/lib/firebase-admin');
-  const [url] = await bucket.file(storagePath).getSignedUrl({
+  const { getBucket } = await import('@/lib/firebase-admin');
+  const [url] = await getBucket().file(storagePath).getSignedUrl({
     action: 'read',
     expires: Date.now() + 60 * 60 * 1000,
   });
