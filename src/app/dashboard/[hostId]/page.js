@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/lib/firebase';
+
 import {
   getFiles,
   getFileDownloadUrl,
@@ -234,22 +233,28 @@ export default function DashboardPage() {
 
       for (const { file, relativePath } of uploadFiles) {
         const storagePath = `uploads/${hostId}/${relativePath}`;
-        const storageRef = ref(storage, storagePath);
-        try {
-          await uploadBytes(storageRef, file);
-          const downloadURL = await getDownloadURL(storageRef);
-          metadata.push({
-            name: file.name,
-            fullPath: relativePath,
-            storagePath,
-            size: file.size,
-            mimeType: file.type || 'application/octet-stream',
-            downloadURL,
-          });
-        } catch (uploadErr) {
-          setUploadError(`Failed to upload "${relativePath}": ${uploadErr.message || 'Permission denied. Check Firebase Storage rules.'}`);
+        const fd = new FormData();
+        fd.append('hostId', hostId);
+        fd.append('file', file);
+        fd.append('storagePath', storagePath);
+
+        const res = await fetch('/api/upload', { method: 'POST', body: fd });
+        const result = await res.json();
+
+        if (!res.ok) {
+          setUploadError(result.error || `Failed to upload "${relativePath}"`);
           return;
         }
+
+        metadata.push({
+          name: result.name,
+          fullPath: relativePath,
+          storagePath,
+          size: result.size,
+          mimeType: result.mimeType,
+          downloadURL: result.downloadURL,
+        });
+
         done++;
         setUploadProgress(Math.round((done / uploadFiles.length) * 100));
       }
