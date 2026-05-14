@@ -2,13 +2,14 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
 import { createSession, addFiles } from '@/actions';
 
 export default function HostPage() {
   const router = useRouter();
   const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null);
   const [pin, setPin] = useState('');
   const [files, setFiles] = useState([]);
   const [dragging, setDragging] = useState(false);
@@ -112,17 +113,21 @@ export default function HostPage() {
         const storagePath = `uploads/${newHostId}/${relativePath}`;
         const storageRef = ref(storage, storagePath);
 
-        await uploadBytesResumable(storageRef, file);
-        const downloadURL = await getDownloadURL(storageRef);
+        try {
+          await uploadBytes(storageRef, file);
+          const downloadURL = await getDownloadURL(storageRef);
 
-        fileMetadata.push({
-          name: file.name,
-          fullPath: relativePath,
-          storagePath,
-          size: file.size,
-          mimeType: file.type || 'application/octet-stream',
-          downloadURL,
-        });
+          fileMetadata.push({
+            name: file.name,
+            fullPath: relativePath,
+            storagePath,
+            size: file.size,
+            mimeType: file.type || 'application/octet-stream',
+            downloadURL,
+          });
+        } catch (uploadErr) {
+          throw new Error(`Failed to upload "${relativePath}": ${uploadErr.message || 'Permission denied. Check Firebase Storage rules.'}`);
+        }
 
         completed++;
         setProgress(Math.round((completed / files.length) * 100));
@@ -241,8 +246,15 @@ export default function HostPage() {
               ref={fileInputRef}
               type="file"
               multiple
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+            <input
+              ref={folderInputRef}
+              type="file"
               webkitdirectory=""
               directory=""
+              multiple
               className="hidden"
               onChange={handleFileSelect}
             />
@@ -255,11 +267,19 @@ export default function HostPage() {
               </div>
               <div>
                 <p className="text-lg font-medium">
-                  {files.length > 0 ? `${files.length} file(s) selected` : 'Drop files here or click to browse'}
+                  {files.length > 0 ? `${files.length} file(s) selected` : 'Drop files or folders here'}
                 </p>
                 <p className="text-sm text-gray-500 mt-1">
-                  Supports individual files and entire folders
+                  Drag & drop anywhere on this area
                 </p>
+              </div>
+              <div className="flex gap-2 mt-2">
+                <button type="button" onClick={() => fileInputRef.current?.click()} className="btn-secondary !py-2 !px-4 text-sm">
+                  Browse Files
+                </button>
+                <button type="button" onClick={() => folderInputRef.current?.click()} className="btn-secondary !py-2 !px-4 text-sm">
+                  Browse Folders
+                </button>
               </div>
             </div>
           </div>

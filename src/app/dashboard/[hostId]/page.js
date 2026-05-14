@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
 import {
   getFiles,
@@ -20,7 +20,8 @@ export default function DashboardPage() {
   const { hostId } = useParams();
   const router = useRouter();
   const fileInputRef = useRef(null);
-
+  const folderInputRef = useRef(null);
+ 
   const [fileTree, setFileTree] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -37,6 +38,7 @@ export default function DashboardPage() {
   const [uploadDragging, setUploadDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState('');
 
   const [showHostControls, setShowHostControls] = useState(false);
   const [currentPin, setCurrentPin] = useState('');
@@ -224,6 +226,7 @@ export default function DashboardPage() {
     if (uploadFiles.length === 0) return;
     setUploading(true);
     setUploadProgress(0);
+    setUploadError('');
 
     try {
       const metadata = [];
@@ -232,16 +235,21 @@ export default function DashboardPage() {
       for (const { file, relativePath } of uploadFiles) {
         const storagePath = `uploads/${hostId}/${relativePath}`;
         const storageRef = ref(storage, storagePath);
-        await uploadBytesResumable(storageRef, file);
-        const downloadURL = await getDownloadURL(storageRef);
-        metadata.push({
-          name: file.name,
-          fullPath: relativePath,
-          storagePath,
-          size: file.size,
-          mimeType: file.type || 'application/octet-stream',
-          downloadURL,
-        });
+        try {
+          await uploadBytes(storageRef, file);
+          const downloadURL = await getDownloadURL(storageRef);
+          metadata.push({
+            name: file.name,
+            fullPath: relativePath,
+            storagePath,
+            size: file.size,
+            mimeType: file.type || 'application/octet-stream',
+            downloadURL,
+          });
+        } catch (uploadErr) {
+          setUploadError(`Failed to upload "${relativePath}": ${uploadErr.message || 'Permission denied. Check Firebase Storage rules.'}`);
+          return;
+        }
         done++;
         setUploadProgress(Math.round((done / uploadFiles.length) * 100));
       }
@@ -252,7 +260,7 @@ export default function DashboardPage() {
       loadFiles();
       loadSessionInfo();
     } catch (err) {
-      console.error('Upload failed', err);
+      setUploadError(err.message || 'Upload failed');
     } finally {
       setUploading(false);
     }
@@ -483,15 +491,21 @@ export default function DashboardPage() {
               className={`dropzone p-6 text-center mb-4 ${uploadDragging ? 'active' : ''}`}
               onDragOver={(e) => { e.preventDefault(); setUploadDragging(true); }}
               onDragLeave={(e) => { e.preventDefault(); setUploadDragging(false); }}
-              onDrop={handleUploadDrop}
-              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); }}
             >
               <input
                 ref={fileInputRef}
                 type="file"
                 multiple
+                className="hidden"
+                onChange={handleUploadSelect}
+              />
+              <input
+                ref={folderInputRef}
+                type="file"
                 webkitdirectory=""
                 directory=""
+                multiple
                 className="hidden"
                 onChange={handleUploadSelect}
               />
@@ -499,7 +513,15 @@ export default function DashboardPage() {
                 <svg className="w-8 h-8 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                 </svg>
-                <p className="text-sm">{uploadFiles.length > 0 ? `${uploadFiles.length} file(s) selected` : 'Drop files or click to browse'}</p>
+                <p className="text-sm">{uploadFiles.length > 0 ? `${uploadFiles.length} file(s) selected` : 'Drop files or folders here'}</p>
+              </div>
+              <div className="flex gap-2 mt-2">
+                <button type="button" onClick={() => fileInputRef.current?.click()} className="btn-secondary !py-1.5 !px-3 text-xs">
+                  Browse Files
+                </button>
+                <button type="button" onClick={() => folderInputRef.current?.click()} className="btn-secondary !py-1.5 !px-3 text-xs">
+                  Browse Folders
+                </button>
               </div>
             </div>
 
@@ -530,6 +552,12 @@ export default function DashboardPage() {
                 <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
                 </div>
+              </div>
+            )}
+
+            {uploadError && (
+              <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs px-3 py-2 rounded-lg mb-3">
+                {uploadError}
               </div>
             )}
 
